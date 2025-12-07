@@ -1,0 +1,54 @@
+stages: [sign_scan]
+
+sign-scan:
+  stage: sign_scan
+  image: debian:bookworm-slim
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
+  script:
+    - set -euo pipefail
+    - apt-get update -y
+    - apt-get install -y curl jq ca-certificates tar unzip skopeo
+    - update-ca-certificates
+
+    - echo "$GITLAB_OIDC_TOKEN" > "$CI_PROJECT_DIR/OIDC.jwt"
+    - export AWS_ROLE_ARN=$ecrr #role to manage the ecr and key signing
+    - export AWS_REGION="eu-central-1"
+    - export KMS=$kms
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/OIDC.jwt"
+
+    - curl -fsSLo awscliv2.zip https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+    - unzip -q awscliv2.zip && ./aws/install
+
+    - export PASS="$(aws ecr get-login-password)"
+    - export AUTH="$(printf 'AWS:%s' "$PASS" | base64 -w0)"
+    - mkdir -p ~/.docker
+    - |                            #i could just install docker but it'd take more time and this works just fine
+      cat > ~/.docker/config.json <<EOT
+      { "auths": { "${aid}.dkr.ecr.${AWS_REGION}.amazonaws.com": { "auth": "${AUTH}" } } }
+      EOT
+
+    - curl -fsSLo /usr/local/bin/cosign "https://github.com/sigstore/cosign/releases/download/v2.5.3/cosign-linux-amd64"
+    - chmod +x /usr/local/bin/cosign
+
+    - curl -fsSLo trivy.tgz "https://github.com/aquasecurity/trivy/releases/download/v0.66.0/trivy_0.66.0_Linux-64bit.tar.gz"
+    - tar -xzf trivy.tgz trivy && mv trivy /usr/local/bin/
+
+    - DGST="$(skopeo inspect --format '{{.Digest}}' "docker://$DOCKERIMG")"
+    - SRC="${DOCKERIMG%%:*}"                                                                     #DOCKERIMG is the variable for whatever you want to pull. i could do this as an input but it works either way
+    - SRCRF="${SRC}@${DGST}"
+    - trivy image --ignore-unfixed --severity HIGH,CRITICAL --exit-code 1 --timeout 10m "$SRCRF"      #prescans the image before pushing it to ecr to save space since my previous version pushed it to ecr prior to scanning
+
+    - TG="import-$(echo "$DOCKERIMG" | tr '/:@' '_')"
+    - skopeo copy "docker://$SRCRF" "docker://$ecr:$TG"
+
+    - ECRDG="$(skopeo inspect --format '{{.Digest}}' "docker://$ecr:$TG")"
+    - IMGR="$ecr@$ECRDG"
+    - trivy image --ignore-unfixed --severity HIGH,CRITICAL --exit-code 1 --timeout 10m "$IMGR"        #just to make sure
+    - cosign sign -y --key "awskms:///$KMS" "$IMGR"
+    - trivy image --ignore-unfixed --format cosign-vuln --timeout 10m -o scan.json "$IMGR"
+    - cosign attest -y --key "awskms:///$KMS" --type vuln --predicate scan.json "$IMGR"
+  artifacts:
+    paths: [scan.json]
+    expire_in: 1 week 

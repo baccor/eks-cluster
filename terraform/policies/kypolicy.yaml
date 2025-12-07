@@ -1,0 +1,70 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: kms
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: kms
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["loadbalancer"]   #check /caveats
+      verifyImages:
+        - failureAction: Enforce
+          imageReferences: ["*"]
+          required: true
+          mutateDigest: true
+          attestors:
+            - entries:
+                - keys:
+                    publicKeys: |-
+                       -----BEGIN PUBLIC KEY-----
+                       ************************           #could be fetched dynamically as mentioned in kyverno.tf 
+                       -----END PUBLIC KEY-----
+                    rekor:
+                      ignoreTlog: true
+                      url: https://rekor.sigstore.dev   #check /caveats
+                    ctlog:
+                      ignoreSCT: true
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: vuln
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: vuln
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["loadbalancer"]
+      verifyImages:
+        - failureAction: Enforce
+          imageReferences: ["*"]
+          required: true
+          mutateDigest: true
+          attestations:
+          - predicateType: https://cosign.sigstore.dev/attestation/vuln/v1
+            attestors:
+            - entries:
+              - keys:
+                  publicKeys: |-
+                     -----BEGIN PUBLIC KEY-----
+                     ************************
+                     -----END PUBLIC KEY-----
+                  rekor:
+                    ignoreTlog: true
+                    url: https://rekor.sigstore.dev
+                  ctlog:
+                    ignoreSCT: true
+            conditions:
+              - all:
+                - key: "{{ length(scanner.result.Results[?Vulnerabilities != null].Vulnerabilities[][?Severity=='HIGH' || Severity=='CRITICAL']) }}" 
+                  operator: Equals
+                  value: 0
