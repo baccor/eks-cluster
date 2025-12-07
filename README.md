@@ -6,4 +6,4 @@ Inside the cluster, Kyverno admissions the image based on the KMS key and an att
 
 Here's a simplified graph:
 
-![g](/img/r.png)
+![g](/img/g.png)
