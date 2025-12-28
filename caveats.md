@@ -18,17 +18,11 @@ The policy has Tlog and SCT ignored, similarly to 2# if i were to expand on this
 KMS pubkey is hardcoded because of the additional endpoint cost, it works either way but this is just more cost efficient.
 Validation scope is just the loadbalancer namespace but it'd be a better idea to exclude the necessary system pods and validate any other pod across the whole cluster(Not really needed for the current state of the project).
 
-
 4# No monitoring
 
 I could add it but there's no real traffic and i already did a monitoring project.
 
-5# Issues(kinda)
-
-LB and Kyverno stall on destroy so i need to destroy them with a script. Despite troubleshooting there's no logs or any logical links that point to the core of it, just a forever stuck finalizer.
-
-
-6# Could (or wanted to) add:
+5# Could (or wanted to) add:
 
 - Cilium (added this at the very beginning but i'd either hit a pod limit or would need to replace the already existing cni so i just got rid of it)
 - Argo/Flux

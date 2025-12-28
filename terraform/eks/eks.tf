@@ -8,13 +8,24 @@ terraform {
   }
 }
 
+locals {
+  vpcid = data.terraform_remote_state.main.outputs.vpcid
+  prs1 = data.terraform_remote_state.main.outputs.prs1
+  prs2 = data.terraform_remote_state.main.outputs.prs2
+  path = replace(data.aws_eks_cluster.eksc.identity[0].oidc[0].issuer, "https://", "")
+  ipc = chomp(data.http.ip.response_body)
+  ip = "${local.ipc}/32"
+  prrtid = data.terraform_remote_state.main.outputs.prrtid
+}
+
+
 provider "kubernetes" {
   host                   = data.aws_eks_cluster.eksc.endpoint
   cluster_ca_certificate = base64decode(data.aws_eks_cluster.eksc.certificate_authority[0].data)
 
   exec {
     api_version = "client.authentication.k8s.io/v1"
-    command     = "aws"
+    command = "aws"
     args = [
       "eks",
       "get-token",
@@ -48,7 +59,7 @@ provider "kubectl" {
 
   exec {
     api_version = "client.authentication.k8s.io/v1"
-    command     = "aws"
+    command = "aws"
     args = [
       "eks",
       "get-token",
@@ -70,12 +81,6 @@ resource "aws_iam_openid_connect_provider" "eksc_oidc" {
   url             = data.aws_eks_cluster.eksc.identity[0].oidc[0].issuer
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = [data.tls_certificate.oidc.certificates[0].sha1_fingerprint]
-}
-
-locals {
-  path = replace(data.aws_eks_cluster.eksc.identity[0].oidc[0].issuer, "https://", "")
-  ipc = chomp(data.http.ip.response_body)
-  ip = "${local.ipc}/32"
 }
 
 resource "aws_iam_role" "cni_irsa" {
@@ -165,8 +170,8 @@ resource "aws_eks_cluster" "eksc" {
   role_arn = aws_iam_role.ekscr.arn
   vpc_config {
     subnet_ids = [
-      aws_subnet.prs1.id,
-      aws_subnet.prs2.id
+      local.prs1,
+      local.prs2
     ]
     endpoint_public_access  = true
     endpoint_private_access = true
@@ -186,21 +191,20 @@ resource "aws_eks_node_group" "eksng" {
 
 
   subnet_ids = [
-    aws_subnet.prs1.id,
-    aws_subnet.prs2.id
+    local.prs1,
+    local.prs2
   ] 
   scaling_config {
-    desired_size = 4
-    max_size     = 4
-    min_size     = 4
+    desired_size = 7
+    max_size     = 7
+    min_size     = 7
   }
-
 
 }
 
 resource "aws_security_group" "vpce" {
   name   = "vpce"
-  vpc_id = aws_vpc.vpc.id
+  vpc_id = local.vpcid
 }
 
 
@@ -212,3 +216,5 @@ resource "aws_security_group_rule" "ngen" {
   security_group_id        = aws_security_group.vpce.id
   source_security_group_id = aws_eks_cluster.eksc.vpc_config[0].cluster_security_group_id
 }
+
+

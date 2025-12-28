@@ -11,7 +11,12 @@ spec:
         any:
           - resources:
               kinds: ["Pod"]
-              namespaces: ["loadbalancer"]   #check /caveats
+              namespaces: ["loadbalancer"]   #could whitelist system pods and check every other (check /caveats)
+      context:
+        - name: KMS
+          configMap:
+            name: kms
+            namespace: kyverno
       verifyImages:
         - failureAction: Enforce
           imageReferences: ["*"]
@@ -20,10 +25,11 @@ spec:
           attestors:
             - entries:
                 - keys:
+                    #kms: "{{ KMS.data.keyUri }}"
                     publicKeys: |-
-                       -----BEGIN PUBLIC KEY-----
-                       ************************           #could be fetched dynamically as mentioned in kyverno.tf 
-                       -----END PUBLIC KEY-----
+                     -----BEGIN PUBLIC KEY-----
+                     **************************
+                     -----END PUBLIC KEY-----
                     rekor:
                       ignoreTlog: true
                       url: https://rekor.sigstore.dev   #check /caveats
@@ -44,6 +50,11 @@ spec:
           - resources:
               kinds: ["Pod"]
               namespaces: ["loadbalancer"]
+      context:
+        - name: KMS
+          configMap:
+            name: kms
+            namespace: kyverno
       verifyImages:
         - failureAction: Enforce
           imageReferences: ["*"]
@@ -53,10 +64,11 @@ spec:
           - predicateType: https://cosign.sigstore.dev/attestation/vuln/v1
             attestors:
             - entries:
-              - keys:
+              - keys: 
+                  #kms: "{{ KMS.data.keyUri }}"
                   publicKeys: |-
                      -----BEGIN PUBLIC KEY-----
-                     ************************
+                     **************************
                      -----END PUBLIC KEY-----
                   rekor:
                     ignoreTlog: true

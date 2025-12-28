@@ -1,6 +1,7 @@
 locals {
     kypolicy = (templatefile("${path.module}/policies/kypolicy.yaml", {
 }))
+path = replace(data.terraform_remote_state.eks.outputs.eksciss, "https://", "")
 }
 
 data "kubectl_file_documents" "kyp" {
@@ -13,10 +14,8 @@ resource "kubectl_manifest" "kypolicy" {
   yaml_body = each.value
 
   depends_on = [
-    helm_release.kyverno, aws_eks_cluster.eksc
+    helm_release.kyverno#, kubernetes_config_map.kyvkms
   ]
-
-
 }
 
 data "aws_caller_identity" "me" {}
@@ -28,7 +27,6 @@ resource "helm_release" "kyverno" {
   version    = "3.5.1"
   namespace  = "kyverno"
   create_namespace = true
-  timeout = 600
 
   set = [
 
@@ -39,7 +37,7 @@ resource "helm_release" "kyverno" {
 
     {
       name = "cleanupController.enabled", #check /caveats
-      value = false
+      value = true
     },
 
     {
@@ -58,6 +56,16 @@ resource "helm_release" "kyverno" {
     },
 
     {
+       name = "cleanupController.rbac.serviceAccount.name",
+       value = "kyverno-cleanup-controller"
+    },
+
+    {
+      name = "cleanupController.rbac.serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn",
+      value = aws_iam_role.kyverno.arn
+    },
+
+    {
       name = "backgroundController.rbac.serviceAccount.name",
       value = "kyverno-background-controller"
     },
@@ -70,6 +78,11 @@ resource "helm_release" "kyverno" {
     {
        name = "backgroundController.image.repository",
        value = "kyverno/background-controller"
+    },
+
+    {
+       name = "cleanupController.image.repository",
+       value = "kyverno/cleanup-controller"
     },
 
     {
@@ -93,15 +106,17 @@ resource "helm_release" "kyverno" {
     },
 
     {
+      name = "cleanupController.container.image.tag",
+      value = "v1.15.1"
+    },
+
+    {
        name = "backgroundController.image.tag",
        value = "v1.15.1"
     }
 
   ]
-
-  depends_on = [
-    aws_eks_node_group.eksng
-  ]
+  depends_on = [helm_release.lbc]
 
 }
 
@@ -112,7 +127,7 @@ resource "aws_iam_role" "kyverno" {
     Statement = [{
       Effect = "Allow"
       Principal = {
-        Federated = aws_iam_openid_connect_provider.eksc_oidc.arn
+        Federated = data.terraform_remote_state.eks.outputs.ekscoidc
       }
       Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
@@ -123,6 +138,7 @@ resource "aws_iam_role" "kyverno" {
             "system:serviceaccount:kyverno:kyverno",
             "system:serviceaccount:kyverno:kyverno-admission-controller",
             "system:serviceaccount:kyverno:kyverno-background-controller",
+            "system:serviceaccount:kyverno:kyverno-cleanup-controller"
             ]
           }
         }
@@ -148,15 +164,30 @@ resource "aws_iam_role_policy" "kyvernop" {
           ],
 
           Resource = "*"
-        }#,
-        
-       # {
-       #   Effect = "Allow",
-       #   Action = [
-       #     "kms:GetPublicKey",      for dynamic KMS key fetching (check /caveats)
-       #     "kms:DescribeKey"
-       #   ],
-       #   Resource = var.kms}
+        }/*,
+
+        {
+          Effect = "Allow",
+          Action = [
+            "kms:GetPublicKey",
+            "kms:DescribeKey"
+          ],
+          Resource = var.kms}*/
         ]
     })
 }
+
+/*resource "kubernetes_config_map" "kyvkms" {
+  metadata{
+    name = "kms"
+    namespace = "kyverno"
+    labels = {
+      app = "kyverno"
+    }
+  }
+
+  data = {
+    keyUri = "awskms:///" + var.kms
+  }
+  depends_on [helm_release.kyverno]
+} */

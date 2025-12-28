@@ -5,8 +5,8 @@ resource "aws_eks_addon" "coredns" {
   resolve_conflicts_on_create = "OVERWRITE"
 
   depends_on = [
-    aws_eks_node_group.eksng,
-    aws_eks_addon.vpc_cni
+    aws_eks_addon.vpc_cni,
+    aws_eks_node_group.eksng
   ]
 }
 
@@ -25,3 +25,4 @@ resource "aws_eks_addon" "kube-proxy" {
   addon_name = "kube-proxy"
   resolve_conflicts_on_create = "OVERWRITE"
 }
+
