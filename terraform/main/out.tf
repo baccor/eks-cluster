@@ -14,4 +14,8 @@ output "prrtid" {
   value = aws_route_table.pr_rt.id
 }
 
+output "vpnsgid" {
+  value = aws_security_group.vpnsg.id
+}
+
 

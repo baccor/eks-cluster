@@ -15,6 +15,56 @@ resource "aws_internet_gateway" "igw" {
 
 }
 
+resource "aws_acm_certificate" "vpncrt" {
+  private_key = file("${path.module}/crt/srv.key")
+  certificate_body = file("${path.module}/crt/srv.crt")
+  certificate_chain = file("${path.module}/crt/ca.crt")
+}
+
+resource "aws_security_group" "vpnsg" {
+  name = "vpnsg"
+  vpc_id = aws_vpc.vpc.id
+}
+
+resource "aws_vpc_security_group_egress_rule" "vpneg" {
+  ip_protocol              = "-1"
+  cidr_ipv4 = aws_vpc.vpc.cidr_block
+  security_group_id        = aws_security_group.vpnsg.id
+}
+
+resource "aws_ec2_client_vpn_endpoint" "vpne" {
+  server_certificate_arn = aws_acm_certificate.vpncrt.arn
+  client_cidr_block      = "10.50.0.0/16"
+  security_group_ids = [aws_security_group.vpnsg.id]
+  vpc_id = aws_vpc.vpc.id
+
+  authentication_options {
+    type                       = "certificate-authentication"
+    root_certificate_chain_arn = aws_acm_certificate.vpncrt.arn
+  }
+
+  split_tunnel = true
+
+  dns_servers = [
+    "10.0.0.2"
+  ]
+
+  connection_log_options {
+    enabled               = false
+  }
+}
+
+resource "aws_ec2_client_vpn_network_association" "vpna" {
+  client_vpn_endpoint_id = aws_ec2_client_vpn_endpoint.vpne.id
+  subnet_id              = aws_subnet.prs1.id
+}
+
+resource "aws_ec2_client_vpn_authorization_rule" "vpnar" {
+  client_vpn_endpoint_id = aws_ec2_client_vpn_endpoint.vpne.id
+  target_network_cidr    = aws_vpc.vpc.cidr_block
+  authorize_all_groups   = true
+}
+
 resource "aws_subnet" "ps1" {
   vpc_id                  = aws_vpc.vpc.id
   cidr_block              = "10.0.1.0/24"

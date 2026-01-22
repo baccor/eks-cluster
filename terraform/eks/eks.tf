@@ -16,6 +16,7 @@ locals {
   ipc = chomp(data.http.ip.response_body)
   ip = "${local.ipc}/32"
   prrtid = data.terraform_remote_state.main.outputs.prrtid
+  vpnsgid = data.terraform_remote_state.main.outputs.vpnsgid
 }
 
 
@@ -163,6 +164,14 @@ resource "aws_iam_role_policy_attachment" "eksncrr" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
+resource "aws_vpc_security_group_ingress_rule" "vpning" {
+ security_group_id = aws_eks_cluster.eksc.vpc_config[0].cluster_security_group_id
+ referenced_security_group_id = local.vpnsgid
+
+ from_port   = 443
+ ip_protocol = "tcp"
+ to_port     = 443
+}
 
 
 resource "aws_eks_cluster" "eksc" {
@@ -173,9 +182,8 @@ resource "aws_eks_cluster" "eksc" {
       local.prs1,
       local.prs2
     ]
-    endpoint_public_access  = true
+    endpoint_public_access  = false
     endpoint_private_access = true
-    public_access_cidrs     = [local.ip]  #could do a bastion (check /caveats)
   }
 }
 
@@ -208,13 +216,12 @@ resource "aws_security_group" "vpce" {
 }
 
 
-resource "aws_security_group_rule" "ngen" {
-  type                     = "ingress"
+resource "aws_vpc_security_group_ingress_rule" "ngen" {
   from_port                = 443
   to_port                  = 443
-  protocol                 = "tcp"
+  ip_protocol              = "tcp"
   security_group_id        = aws_security_group.vpce.id
-  source_security_group_id = aws_eks_cluster.eksc.vpc_config[0].cluster_security_group_id
+  referenced_security_group_id = aws_eks_cluster.eksc.vpc_config[0].cluster_security_group_id
 }
 
 
