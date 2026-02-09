@@ -45,7 +45,7 @@ sign-scan:
 
     - ECRDG="$(skopeo inspect --format '{{.Digest}}' "docker://$ecr:$TG")"
     - IMGR="$ecr@$ECRDG"
-    - trivy image --ignore-unfixed --severity HIGH,CRITICAL --exit-code 1 --timeout 10m "$IMGR"        #just to make sure
+    - trivy image --ignore-unfixed --severity HIGH,CRITICAL --exit-code 1 --timeout 10m "$IMGR"        #just to make sure (now that i look at it it's redundant)
     - cosign sign -y --key "awskms:///$KMS" "$IMGR"
     - trivy image --ignore-unfixed --format cosign-vuln --timeout 10m -o scan.json "$IMGR"
     - cosign attest -y --key "awskms:///$KMS" --type vuln --predicate scan.json "$IMGR"

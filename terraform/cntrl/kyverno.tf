@@ -37,7 +37,7 @@ resource "helm_release" "kyverno" {
 
     {
       name = "cleanupController.enabled", #check /caveats
-      value = true
+      value = false
     },
 
     {

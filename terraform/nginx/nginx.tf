@@ -60,8 +60,8 @@ resource "aws_wafv2_ip_set" "waf" {
   addresses = [data.terraform_remote_state.cntrl.outputs.ip]
 }
 
-resource "aws_wafv2_web_acl" "waf" {
-  name = "waf"
+resource "aws_wafv2_web_acl" "waf" {  // set it up like this just so that i can test it fast
+  name = "waf"                        // would rather use a CDN as the aws waf's pretty bad
   scope = "REGIONAL"
 
   default_action {
